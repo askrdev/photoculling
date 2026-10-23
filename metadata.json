@@ -1,0 +1,6 @@
+{
+  "name": "Photo Culling Studio",
+  "description": "Aplikasi penyeleksi foto lokal mandiri di browser untuk mendeteksi blur, eksposur gelap/terang, dan duplikat tanpa upload.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,3420 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Culling Studio</title>
+  <meta name="description" content="Aplikasi penyeleksi foto lokal mandiri di browser untuk mendeteksi blur, eksposur gelap/terang, dan duplikat tanpa upload." />
+  <meta property="og:title" content="Photo Culling Studio" />
+  <meta property="og:description" content="Aplikasi penyeleksi foto lokal mandiri di browser untuk mendeteksi blur, eksposur gelap/terang, dan duplikat tanpa upload." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <style>
+    /* CSS Reset & Variables */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #131b2e;
+      --bg-card: #1a233b;
+      --bg-card-hover: #222d4a;
+      --border-subtle: #273553;
+      --border-strong: #3b4d75;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent: #4f46e5;
+      --accent-hover: #6366f1;
+      --accent-glow: rgba(79, 70, 229, 0.25);
+      --keep: #10b981;
+      --keep-bg: rgba(16, 185, 129, 0.15);
+      --keep-border: #059669;
+      --reject: #f43f5e;
+      --reject-bg: rgba(244, 63, 94, 0.15);
+      --reject-border: #e11d48;
+      --doubt: #f59e0b;
+      --doubt-bg: rgba(245, 158, 11, 0.15);
+      --doubt-border: #d97706;
+      --gold: #fbbf24;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+      --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-base);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-strong);
+    }
+
+    /* Typography & Helper Classes */
+    h1, h2, h3, h4 {
+      font-weight: 600;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+    }
+    p {
+      color: var(--text-muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+    .badge-keep {
+      background: rgba(6, 78, 59, 0.95);
+      color: #34d399;
+      border: 1px solid #10b981;
+    }
+    .badge-reject {
+      background: rgba(136, 19, 55, 0.95);
+      color: #fda4af;
+      border: 1px solid #f43f5e;
+    }
+    .badge-doubt {
+      background: rgba(120, 53, 15, 0.95);
+      color: #fde68a;
+      border: 1px solid #f59e0b;
+    }
+    .badge-gold {
+      background: rgba(113, 63, 18, 0.95);
+      color: #fef08a;
+      border: 1px solid #eab308;
+    }
+
+    /* App Header */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(8px);
+    }
+    .header-inner {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #4f46e5, #ec4899);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .brand-tag {
+      font-size: 11px;
+      color: #10b981;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Stats Pill Bar */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-base);
+      padding: 4px 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      font-size: 13px;
+    }
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+    }
+    .stat-sep {
+      width: 1px;
+      height: 16px;
+      background: var(--border-subtle);
+    }
+    .stat-val {
+      font-weight: 700;
+    }
+
+    /* Header Actions */
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+      white-space: nowrap;
+      text-decoration: none;
+      color: var(--text-main);
+      background: var(--bg-card);
+    }
+    .btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-strong);
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .btn-success {
+      background: var(--keep);
+      color: #ffffff;
+      border-color: var(--keep);
+    }
+    .btn-success:hover {
+      background: #059669;
+    }
+    .btn-danger {
+      background: var(--reject);
+      color: #ffffff;
+      border-color: var(--reject);
+    }
+    .btn-danger:hover {
+      background: #e11d48;
+    }
+    .btn-warning {
+      background: var(--doubt);
+      color: #ffffff;
+      border-color: var(--doubt);
+    }
+    .btn-outline {
+      background: transparent;
+      border-color: var(--border-subtle);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover {
+      color: var(--text-main);
+      border-color: var(--border-strong);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Empty State / Welcome Screen */
+    .empty-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px 80px;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .hero-chip {
+      background: rgba(79, 70, 229, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #a5b4fc;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hero-title {
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-desc {
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 680px;
+      margin-bottom: 32px;
+    }
+    .hero-cta-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 40px;
+    }
+
+    /* 3-Step Guide Grid */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      width: 100%;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+    .step-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      position: relative;
+      transition: border-color 0.2s ease;
+    }
+    .step-card:hover {
+      border-color: var(--border-strong);
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(79, 70, 229, 0.2);
+      color: #818cf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      margin-bottom: 14px;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+    .step-card h3 {
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+    .step-card p {
+      font-size: 13px;
+    }
+
+    .notice-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 720px;
+    }
+
+    /* Ready to Analyze Screen */
+    .ready-banner {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .ready-info h2 {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .ready-stats {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .ready-stats span {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Analysis In-Progress Screen */
+    .progress-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .progress-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border-subtle);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 10px;
+      background: var(--bg-base);
+      border-radius: 9999px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4f46e5, #06b6d4);
+      border-radius: 9999px;
+      transition: width 0.15s ease-out;
+    }
+    .progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .progress-meta strong {
+      color: var(--text-main);
+    }
+    .progress-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Error Log Drawer */
+    .error-log-box {
+      background: rgba(244, 63, 94, 0.08);
+      border: 1px solid rgba(244, 63, 94, 0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      font-size: 12px;
+    }
+    .error-log-header {
+      color: #fda4af;
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    /* Workspace Toolbar */
+    .workspace-toolbar {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .filter-tab {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .filter-tab:hover {
+      background: var(--bg-card);
+      color: var(--text-main);
+    }
+    .filter-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .filter-tab.active.tab-keep {
+      background: var(--keep);
+      border-color: var(--keep);
+    }
+    .filter-tab.active.tab-reject {
+      background: var(--reject);
+      border-color: var(--reject);
+    }
+    .filter-tab.active.tab-doubt {
+      background: var(--doubt);
+      border-color: var(--doubt);
+    }
+    .filter-pill {
+      font-size: 11px;
+      padding: 1px 6px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 9999px;
+    }
+
+    .tools-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .select-dropdown {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+    }
+    .select-dropdown:focus {
+      border-color: var(--accent);
+    }
+
+    /* Multi-Selection Bar */
+    .selection-bar {
+      background: rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: var(--radius-md);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      animation: fadeIn 0.15s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .selection-info {
+      font-size: 13px;
+      font-weight: 600;
+      color: #c7d2fe;
+    }
+    .selection-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Sliders Drawer */
+    .threshold-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      animation: fadeIn 0.15s ease;
+    }
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .slider-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .slider-val {
+      color: #818cf8;
+      font-family: monospace;
+    }
+    .slider-input {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-base);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+    .slider-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+    .slider-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Grid Workspace */
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 14px;
+      width: 100%;
+    }
+
+    /* Photo Card */
+    .photo-card {
+      background: var(--bg-surface);
+      border: 2px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .photo-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .photo-card.is-selected {
+      border-color: var(--accent) !important;
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    .photo-card.card-keep {
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .photo-card.card-reject {
+      border-color: rgba(244, 63, 94, 0.4);
+    }
+    .photo-card.card-doubt {
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    /* Thumbnail Area */
+    .card-thumb-wrap {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #0b0f19;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.2s ease;
+    }
+    .photo-card:hover .card-thumb {
+      transform: scale(1.03);
+    }
+
+    /* Badges Overlay */
+    .thumb-overlay-top {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      right: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .thumb-overlay-bottom {
+      position: absolute;
+      bottom: 6px;
+      left: 6px;
+      right: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .select-checkbox-wrap {
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 4px;
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .select-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Quick Action Buttons on Card Hover */
+    .card-quick-actions {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      z-index: 5;
+    }
+    .photo-card:hover .card-quick-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .quick-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+      transition: transform 0.1s ease;
+    }
+    .quick-btn:hover {
+      transform: scale(1.15);
+    }
+    .quick-keep { background: var(--keep); }
+    .quick-reject { background: var(--reject); }
+    .quick-doubt { background: var(--doubt); }
+
+    /* Card Details */
+    .card-meta {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: var(--bg-surface);
+    }
+    .card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-specs {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .metric-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .metric-pill {
+      background: var(--bg-base);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Duplicate Groups View */
+    .duplicate-groups-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+    .group-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+    }
+    .group-photos-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+
+    /* Single Photo Viewer Lightbox */
+    .viewer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.92);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      animation: fadeIn 0.15s ease;
+    }
+    .viewer-header {
+      padding: 12px 20px;
+      background: rgba(19, 27, 46, 0.8);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .viewer-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .viewer-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .viewer-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    .viewer-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 20px;
+      overflow: auto;
+    }
+    .viewer-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+      transition: transform 0.2s ease;
+    }
+    .viewer-img.is-zoomed {
+      max-width: none;
+      max-height: none;
+      cursor: zoom-out;
+    }
+
+    .viewer-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      background: rgba(19, 27, 46, 0.7);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 20px;
+      transition: all 0.15s ease;
+      z-index: 10;
+    }
+    .viewer-nav-btn:hover {
+      background: var(--bg-card);
+      border-color: var(--border-strong);
+      transform: translateY(-50%) scale(1.1);
+    }
+    .nav-prev { left: 24px; }
+    .nav-next { right: 24px; }
+
+    /* Viewer Sidebar Info */
+    .viewer-sidebar {
+      width: 320px;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-subtle);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .info-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 14px;
+    }
+    .info-section:last-child {
+      border-bottom: none;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+    .info-label {
+      color: var(--text-muted);
+    }
+    .info-val {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Modal Dialogs */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.8);
+      backdrop-filter: blur(6px);
+      z-index: 110;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn 0.15s ease;
+    }
+    .modal-dialog {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 600px;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+    .modal-footer {
+      padding: 16px 24px;
+      background: var(--bg-base);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .export-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px;
+    }
+    .export-stat-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .checkbox-label input {
+      margin-top: 3px;
+      accent-color: var(--accent);
+    }
+
+    .warning-banner {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #fde68a;
+      display: flex;
+      gap: 10px;
+    }
+
+    /* Toast Notification */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      color: var(--text-main);
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: auto;
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Hidden Utilities */
+    .hidden { display: none !important; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header-inner { flex-direction: column; align-items: stretch; }
+      .header-actions { justify-content: space-between; }
+      .viewer-main { flex-direction: column; }
+      .viewer-sidebar { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); max-height: 240px; }
+      .export-stat-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- App Header -->
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Photo Culling Studio</h1>
+          <div class="brand-tag">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            100% Offline & Privat di Browser
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Pill Bar (shown after scan) -->
+      <div id="statsBar" class="stats-bar hidden">
+        <div class="stat-item">
+          <span>Total:</span>
+          <span id="statTotal" class="stat-val">0</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat-item" style="color: var(--keep);">
+          <span>Keep:</span>
+          <span id="statKeep" class="stat-val">0</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat-item" style="color: var(--reject);">
+          <span>Reject:</span>
+          <span id="statReject" class="stat-val">0</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat-item" style="color: var(--doubt);">
+          <span>Ragu:</span>
+          <span id="statDoubt" class="stat-val">0</span>
+        </div>
+      </div>
+
+      <!-- Header Action Buttons -->
+      <div class="header-actions">
+        <button id="btnPickFolder" class="btn btn-primary" aria-label="Pilih Folder Foto">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Pilih Folder Foto
+        </button>
+        <button id="btnLoadDemo" class="btn btn-outline" aria-label="Coba Foto Sampel Demo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Foto Sampel Demo
+        </button>
+        <button id="btnExportFolders" class="btn btn-success hidden" aria-label="Pisahkan ke Folder Terkategori">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="12" y1="18" x2="12" y2="12"></line>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+          </svg>
+          Pisahkan ke Folder
+        </button>
+        <button id="btnExportCSV" class="btn btn-outline hidden" aria-label="Ekspor Laporan CSV">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="12" x2="12" y2="3"></line>
+          </svg>
+          Ekspor CSV
+        </button>
+        <button id="btnDownloadHTML" class="btn btn-outline" title="Unduh file HTML tunggal ini untuk digunakan kapan saja tanpa server" aria-label="Unduh File HTML Mandiri">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="8 17 12 21 16 17"></polyline>
+            <line x1="12" y1="12" x2="12" y2="21"></line>
+            <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path>
+          </svg>
+          Unduh File HTML
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hidden Native File Inputs -->
+  <input type="file" id="fallbackFolderInput" multiple webkitdirectory class="hidden" accept="image/jpeg,image/png,image/webp" />
+
+  <!-- Main View Area -->
+  <main>
+
+    <!-- 1. EMPTY / WELCOME SCREEN -->
+    <section id="emptyScreen" class="empty-screen">
+      <div class="hero-chip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Penyortir Foto Otomatis Lokal & Aman
+      </div>
+      <h2 class="hero-title">Seleksi Ribuan Foto Cepat & Otomatis Tanpa Upload</h2>
+      <p class="hero-desc">
+        Membantu fotografer & kreator menyeleksi gigabyte foto dalam hitungan detik. Algoritma komputer vision lokal mendeteksi foto blur (Laplacian 3x3), eksposur gelap/terang, serta kelompok foto duplikat/mirip (dHash 64-bit) langsung di memori browser.
+      </p>
+
+      <div class="hero-cta-group">
+        <button id="btnHeroPickFolder" class="btn btn-primary" style="padding: 12px 24px; font-size: 15px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Pilih Folder Foto Sekarang
+        </button>
+        <button id="btnHeroDemo" class="btn btn-outline" style="padding: 12px 20px; font-size: 15px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Coba Sampel Demo (Instant)
+        </button>
+      </div>
+
+      <!-- 3-Step Guide -->
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3>Pilih Folder Foto</h3>
+          <p>Pilih direktori foto Anda (JPG, PNG, WebP). Aplikasi membaca file secara streaming tanpa mengunggah ke internet.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3>Analisis Otomatis</h3>
+          <p>Sistem mendeteksi tingkat ketajaman, rentang kecerahan, dan kemiripan burst-shot menggunakan Web Worker.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3>Pisahkan ke Folder</h3>
+          <p>Review hasil, sesuaikan ambang sensitivitas secara live, dan salin otomatis ke folder Keep, Blur, Gelap, atau Duplikat.</p>
+        </div>
+      </div>
+
+      <div class="notice-box">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" style="flex-shrink: 0;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>
+          <strong>Catatan:</strong> HEIC dan RAW belum didukung browser native. Gunakan Chrome atau Edge desktop. File asli Anda <strong>tidak pernah diubah atau dihapus</strong> sama sekali (proses ekspor hanya membuat salinan baru).
+        </span>
+      </div>
+    </section>
+
+    <!-- 2. READY TO ANALYZE SCREEN -->
+    <section id="readyScreen" class="ready-banner hidden">
+      <div class="ready-info">
+        <h2>Folder Siap Dianalisis</h2>
+        <p id="readyPathText">Folder telah dipindai dan file gambar siap diproses satu per satu.</p>
+        <div class="ready-stats">
+          <div>Jumlah Foto: <span id="readyCount">0</span></div>
+          <div>Total Ukuran: <span id="readySize">0 MB</span></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <button id="btnStartAnalysis" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          Mulai Analisis
+        </button>
+        <button id="btnCancelScan" class="btn btn-outline">Ganti Folder</button>
+      </div>
+    </section>
+
+    <!-- 3. IN-PROGRESS ANALYSIS SCREEN -->
+    <section id="progressScreen" class="progress-card hidden">
+      <div class="progress-header">
+        <div class="progress-title-wrap">
+          <div class="spinner"></div>
+          <div>
+            <h3 id="progressTitle">Menganalisis Foto...</h3>
+            <p id="progressCurrentFile" style="font-size: 12px; font-family: monospace;">Memproses file...</p>
+          </div>
+        </div>
+        <div class="progress-controls">
+          <button id="btnPauseResume" class="btn btn-outline btn-sm">Jeda</button>
+          <button id="btnCancelAnalysis" class="btn btn-outline btn-sm">Batal</button>
+        </div>
+      </div>
+
+      <div class="progress-bar-bg">
+        <div id="progressBarFill" class="progress-bar-fill"></div>
+      </div>
+
+      <div class="progress-meta">
+        <div>
+          Foto: <strong id="progressCountText">0 / 0</strong> (<strong id="progressPctText">0%</strong>)
+        </div>
+        <div>
+          Kecepatan: <strong id="progressSpeedText">0 foto/detik</strong>
+        </div>
+        <div>
+          Estimasi Sisa: <strong id="progressETAText">--:--</strong>
+        </div>
+      </div>
+
+      <!-- Skipped/Error log if any -->
+      <div id="errorLogBox" class="error-log-box hidden">
+        <div id="errorLogHeader" class="error-log-header">
+          <span>⚠️ Ada file yang dilewati / gagal dibaca (<span id="errorCount">0</span>)</span>
+          <span>Lihat Detail ▼</span>
+        </div>
+        <ul id="errorList" class="hidden" style="margin-top: 6px; padding-left: 18px; max-height: 100px; overflow-y: auto;"></ul>
+      </div>
+    </section>
+
+    <!-- 4. WORKSPACE & REVIEW INTERFACE -->
+    <section id="workspaceScreen" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
+
+      <!-- Toolbar -->
+      <div class="workspace-toolbar">
+        <div class="toolbar-row">
+          <!-- Filter Tabs -->
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">Semua <span id="pillAll" class="filter-pill">0</span></button>
+            <button class="filter-tab tab-keep" data-filter="Keep">Keep <span id="pillKeep" class="filter-pill">0</span></button>
+            <button class="filter-tab tab-reject" data-filter="Reject">Reject <span id="pillReject" class="filter-pill">0</span></button>
+            <button class="filter-tab tab-doubt" data-filter="Ragu-ragu">Ragu-ragu <span id="pillDoubt" class="filter-pill">0</span></button>
+            <button class="filter-tab" data-filter="Blur">Blur <span id="pillBlur" class="filter-pill">0</span></button>
+            <button class="filter-tab" data-filter="Gelap">Gelap <span id="pillDark" class="filter-pill">0</span></button>
+            <button class="filter-tab" data-filter="Terang">Terang <span id="pillBright" class="filter-pill">0</span></button>
+            <button class="filter-tab" data-filter="Duplikat">Duplikat <span id="pillDup" class="filter-pill">0</span></button>
+          </div>
+
+          <!-- Controls Right -->
+          <div class="tools-right">
+            <select id="sortSelect" class="select-dropdown" aria-label="Urutkan Foto">
+              <option value="name_asc">Nama (A - Z)</option>
+              <option value="name_desc">Nama (Z - A)</option>
+              <option value="blur_asc">Skor Blur (Terendah / Paling Blur)</option>
+              <option value="blur_desc">Skor Blur (Tertinggi / Paling Tajam)</option>
+              <option value="bright_asc">Kecerahan (Terendah / Gelap)</option>
+              <option value="bright_desc">Kecerahan (Tertinggi / Terang)</option>
+              <option value="size_desc">Ukuran File (Terbesar)</option>
+              <option value="group">Kelompok Duplikat</option>
+            </select>
+
+            <button id="btnToggleViewMode" class="btn btn-outline btn-sm" aria-label="Ganti Mode Tampilan">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span id="viewModeText">Mode Grup</span>
+            </button>
+
+            <button id="btnToggleSliders" class="btn btn-outline btn-sm" aria-label="Buka Pengaturan Ambang">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="4" y1="21" x2="4" y2="14"></line>
+                <line x1="4" y1="10" x2="4" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12" y2="3"></line>
+                <line x1="20" y1="21" x2="20" y2="16"></line>
+                <line x1="20" y1="12" x2="20" y2="3"></line>
+                <line x1="1" y1="14" x2="7" y2="14"></line>
+                <line x1="9" y1="8" x2="15" y2="8"></line>
+                <line x1="17" y1="16" x2="23" y2="16"></line>
+              </svg>
+              Sensitivitas Ambang
+            </button>
+          </div>
+        </div>
+
+        <!-- Sliders Drawer (Collapsible) -->
+        <div id="thresholdPanel" class="threshold-panel hidden">
+          <!-- Blur Slider -->
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>Ambang Blur (Laplacian)</span>
+              <span id="valBlur" class="slider-val">80</span>
+            </div>
+            <input type="range" id="sliderBlur" class="slider-input" min="20" max="300" step="5" value="80" />
+            <span class="slider-desc">Skor di bawah ini dianggap Blur</span>
+          </div>
+
+          <!-- Dark Slider -->
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>Ambang Terlalu Gelap</span>
+              <span id="valDark" class="slider-val">45</span>
+            </div>
+            <input type="range" id="sliderDark" class="slider-input" min="10" max="80" step="1" value="45" />
+            <span class="slider-desc">Kecerahan rata-rata di bawah ini</span>
+          </div>
+
+          <!-- Bright Slider -->
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>Ambang Terlalu Terang</span>
+              <span id="valBright" class="slider-val">210</span>
+            </div>
+            <input type="range" id="sliderBright" class="slider-input" min="170" max="245" step="1" value="210" />
+            <span class="slider-desc">Kecerahan rata-rata di atas ini</span>
+          </div>
+
+          <!-- Similarity Slider -->
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>Jarak Kemiripan Duplikat</span>
+              <span id="valSimilarity" class="slider-val">8</span>
+            </div>
+            <input type="range" id="sliderSimilarity" class="slider-input" min="0" max="16" step="1" value="8" />
+            <span class="slider-desc">Hamming distance dHash 64-bit</span>
+          </div>
+
+          <!-- Gray Zone Slider -->
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>Zona Ragu-ragu (Gray Zone)</span>
+              <span id="valGrayZone" class="slider-val">15%</span>
+            </div>
+            <input type="range" id="sliderGrayZone" class="slider-input" min="0" max="35" step="5" value="15" />
+            <span class="slider-desc">Rentang ambang yang ditandai Ragu</span>
+          </div>
+
+          <div style="display: flex; align-items: flex-end;">
+            <button id="btnResetThresholds" class="btn btn-outline btn-sm" style="width: 100%;">
+              Reset ke Default
+            </button>
+          </div>
+        </div>
+
+        <!-- Multi-Selection Action Bar -->
+        <div id="selectionBar" class="selection-bar hidden">
+          <div class="selection-info">
+            <span id="selectedCountText">0 foto dipilih</span>
+          </div>
+          <div class="selection-actions">
+            <button id="btnBatchKeep" class="btn btn-sm btn-success">Set Keep (K)</button>
+            <button id="btnBatchReject" class="btn btn-sm btn-danger">Set Reject (X)</button>
+            <button id="btnBatchDoubt" class="btn btn-sm btn-warning">Set Ragu (R)</button>
+            <button id="btnSelectAll" class="btn btn-sm btn-outline">Pilih Semua</button>
+            <button id="btnClearSelection" class="btn btn-sm btn-outline">Batal Pilih</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Photo Grid View -->
+      <div id="gridContainer" class="photos-grid"></div>
+
+      <!-- Duplicate Groups View (Alternative) -->
+      <div id="duplicateGroupsContainer" class="duplicate-groups-list hidden"></div>
+
+      <!-- Pagination / Lazy Load Helper -->
+      <div id="loadMoreTrigger" style="height: 40px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 13px;">
+        <span id="loadMoreText"></span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- SINGLE PHOTO VIEWER MODAL (LIGHTBOX) -->
+  <div id="viewerModal" class="viewer-overlay hidden">
+    <div class="viewer-header">
+      <div class="viewer-title-wrap">
+        <span id="viewerStatusBadge" class="badge">Keep</span>
+        <strong id="viewerFileName" style="font-size: 14px;">IMG_0001.JPG</strong>
+        <span id="viewerIndexText" style="color: var(--text-dim); font-size: 13px;">1 dari 100</span>
+      </div>
+
+      <div class="viewer-actions">
+        <button id="btnViewerKeep" class="btn btn-sm btn-success" title="Tekan 'K'">✔ Keep (K)</button>
+        <button id="btnViewerReject" class="btn btn-sm btn-danger" title="Tekan 'X'">✖ Reject (X)</button>
+        <button id="btnViewerDoubt" class="btn btn-sm btn-warning" title="Tekan 'R'">❓ Ragu (R)</button>
+        <div style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px;"></div>
+        <button id="btnViewerZoom" class="btn btn-sm btn-outline" title="Zoom 100% (Z)">🔍 Zoom</button>
+        <button id="btnViewerClose" class="btn btn-sm btn-outline" title="Tutup (Esc)">✕ Tutup</button>
+      </div>
+    </div>
+
+    <div class="viewer-main">
+      <div class="viewer-stage" id="viewerStage">
+        <button id="btnViewerPrev" class="viewer-nav-btn nav-prev" title="Panah Kiri">‹</button>
+        <img id="viewerImage" class="viewer-img" alt="Pratinjau Foto" />
+        <button id="btnViewerNext" class="viewer-nav-btn nav-next" title="Panah Kanan">›</button>
+      </div>
+
+      <!-- Sidebar Info -->
+      <aside class="viewer-sidebar">
+        <div class="info-section">
+          <h4 style="font-size: 14px; margin-bottom: 4px;">Informasi Berkas</h4>
+          <div class="info-row">
+            <span class="info-label">Nama:</span>
+            <span id="infoName" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Ukuran:</span>
+            <span id="infoSize" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Resolusi:</span>
+            <span id="infoResolution" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Path:</span>
+            <span id="infoPath" class="info-val" style="word-break: break-all; font-size: 11px;">--</span>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h4 style="font-size: 14px; margin-bottom: 4px;">Hasil Analisis Cerdas</h4>
+          <div class="info-row">
+            <span class="info-label">Skor Blur (Laplacian):</span>
+            <span id="infoBlur" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Kecerahan (0-255):</span>
+            <span id="infoBrightness" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Piksel Gelap (<15):</span>
+            <span id="infoDarkPct" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Piksel Terang (>240):</span>
+            <span id="infoBrightPct" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Grup Duplikat:</span>
+            <span id="infoGroup" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Kandidat Terbaik:</span>
+            <span id="infoIsBest" class="info-val">--</span>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h4 style="font-size: 14px; margin-bottom: 4px;">Alasan & Kategori</h4>
+          <div id="infoReasonsList" style="display: flex; flex-direction: column; gap: 4px;"></div>
+        </div>
+
+        <div style="margin-top: auto; font-size: 11px; color: var(--text-dim); line-height: 1.4;">
+          <strong>Shortcut Keyboard:</strong><br>
+          • <strong>K</strong> : Set Status Keep<br>
+          • <strong>X</strong> : Set Status Reject<br>
+          • <strong>R</strong> : Set Status Ragu-ragu<br>
+          • <strong>← / →</strong> : Foto Sebelumnya / Selanjutnya<br>
+          • <strong>Z</strong> : Toggle Zoom 100%<br>
+          • <strong>Esc</strong> : Tutup Viewer
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- EXPORT TO FOLDERS MODAL -->
+  <div id="exportModal" class="modal-overlay hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 style="font-size: 17px;">Pisahkan Foto ke Folder Terkategori</h3>
+        <button id="btnCloseExportModal" class="btn btn-outline btn-sm">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 13px;">
+          Foto akan <strong>disalin</strong> (bukan dipindah atau dihapus) ke subfolder sesuai status hasil seleksi akhir Anda.
+        </p>
+
+        <!-- Stats Breakdown -->
+        <div class="export-stat-grid">
+          <div class="export-stat-item">
+            <span style="color: var(--keep); font-weight: 600;">📁 Keep:</span>
+            <span id="exportCountKeep">0 file</span>
+          </div>
+          <div class="export-stat-item">
+            <span style="color: var(--reject); font-weight: 600;">📁 Reject_Blur:</span>
+            <span id="exportCountBlur">0 file</span>
+          </div>
+          <div class="export-stat-item">
+            <span style="color: var(--reject); font-weight: 600;">📁 Reject_Gelap:</span>
+            <span id="exportCountDark">0 file</span>
+          </div>
+          <div class="export-stat-item">
+            <span style="color: var(--reject); font-weight: 600;">📁 Reject_Terang:</span>
+            <span id="exportCountBright">0 file</span>
+          </div>
+          <div class="export-stat-item">
+            <span style="color: var(--reject); font-weight: 600;">📁 Reject_Duplikat:</span>
+            <span id="exportCountDup">0 file</span>
+          </div>
+          <div class="export-stat-item">
+            <span style="color: var(--doubt); font-weight: 600;">📁 Ragu-ragu:</span>
+            <span id="exportCountDoubt">0 file</span>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="checkIncludeRejects" checked />
+            <span>Salin juga foto kategori Reject (Blur, Gelap, Terang, Duplikat)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="checkPreserveSubfolders" />
+            <span>Pertahankan struktur sub-folder asal di dalam tiap kategori</span>
+          </label>
+        </div>
+
+        <!-- Size Estimation & Disk Space Warning -->
+        <div class="warning-banner">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div>
+            <strong>Estimasi Total Kapasitas yang Akan Ditulis: <span id="exportTotalSize">0 MB</span></strong><br>
+            Pastikan ruang kosong pada drive penyimpanan Anda mencukupi sebelum memulai proses. File asli tidak pernah diubah atau dihapus.
+          </div>
+        </div>
+
+        <!-- Export Progress (during write) -->
+        <div id="exportProgressBox" class="hidden" style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; font-size: 13px;">
+            <span id="exportProgressStatus">Menyalin file...</span>
+            <span id="exportProgressPct">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="exportProgressBarFill" class="progress-bar-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btnCancelExport" class="btn btn-outline">Batal</button>
+        <button id="btnConfirmExport" class="btn btn-success">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Pilih Folder Tujuan & Mulai Salin
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- APPLICATION JAVASCRIPT (STANDALONE VIRTUALIZED CORE) -->
+  <script>
+    (function() {
+      'use strict';
+
+      /* =========================================================================
+       * 1. STATE & DATA STRUCTURES
+       * ========================================================================= */
+      const state = {
+        photos: [], // Array of PhotoData
+        selectedIds: new Set(),
+        currentFilter: 'all',
+        currentSort: 'name_asc',
+        viewMode: 'grid', // 'grid' | 'groups'
+        thresholds: {
+          blurThreshold: 80,
+          darkThreshold: 45,
+          darkPctThreshold: 40,
+          brightThreshold: 210,
+          brightPctThreshold: 35,
+          similarityThreshold: 8,
+          grayZoneRatio: 0.15,
+        },
+        sourceDirectoryHandle: null,
+        isAnalyzing: false,
+        isPaused: false,
+        cancelRequested: false,
+        activeViewerIndex: -1,
+        renderedCount: 0,
+        pageSize: 60,
+        filteredPhotosCache: [],
+      };
+
+      /* =========================================================================
+       * 2. ALGORITHMIC FUNCTIONS (Core Vision Math)
+       * ========================================================================= */
+
+      // 3x3 Laplacian Variance for Blur Detection
+      function calculateLaplacianVariance(grayscale, width, height) {
+        if (width < 3 || height < 3) return 0;
+        const innerCount = (width - 2) * (height - 2);
+        if (innerCount <= 0) return 0;
+
+        let sum = 0;
+        let sumSq = 0;
+
+        for (let y = 1; y < height - 1; y++) {
+          const rowOffset = y * width;
+          const rowAbove = (y - 1) * width;
+          const rowBelow = (y + 1) * width;
+
+          for (let x = 1; x < width - 1; x++) {
+            const top = grayscale[rowAbove + x];
+            const bottom = grayscale[rowBelow + x];
+            const left = grayscale[rowOffset + x - 1];
+            const right = grayscale[rowOffset + x + 1];
+            const center = grayscale[rowOffset + x];
+
+            const lap = top + bottom + left + right - 4 * center;
+            sum += lap;
+            sumSq += lap * lap;
+          }
+        }
+
+        const mean = sum / innerCount;
+        const variance = (sumSq / innerCount) - (mean * mean);
+        return Math.max(0, Math.round(variance * 10) / 10);
+      }
+
+      // Exposure Statistics (Mean Brightness, Dark%, Bright%)
+      function calculateExposureStats(rgba, totalPixels) {
+        if (totalPixels <= 0) return { meanBrightness: 128, darkPct: 0, brightPct: 0 };
+        let totalLum = 0;
+        let darkCount = 0;
+        let brightCount = 0;
+
+        for (let i = 0; i < rgba.length; i += 4) {
+          const r = rgba[i];
+          const g = rgba[i + 1];
+          const b = rgba[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          totalLum += lum;
+
+          if (lum < 15) darkCount++;
+          else if (lum > 240) brightCount++;
+        }
+
+        return {
+          meanBrightness: Math.round((totalLum / totalPixels) * 10) / 10,
+          darkPct: Math.round((darkCount / totalPixels) * 1000) / 10,
+          brightPct: Math.round((brightCount / totalPixels) * 1000) / 10,
+        };
+      }
+
+      // 64-bit dHash from 9x8 Grayscale
+      function calculateDHashFrom9x8(gray9x8) {
+        if (gray9x8.length < 72) return '0000000000000000';
+        let hex = '';
+        for (let row = 0; row < 8; row++) {
+          let rowByte = 0;
+          const rowOffset = row * 9;
+          for (let col = 0; col < 8; col++) {
+            const left = gray9x8[rowOffset + col];
+            const right = gray9x8[rowOffset + col + 1];
+            if (left > right) {
+              rowByte |= (1 << (7 - col));
+            }
+          }
+          hex += rowByte.toString(16).padStart(2, '0');
+        }
+        return hex;
+      }
+
+      // Hamming Distance between two 16-hex character hashes
+      function calculateHammingDistance(hashA, hashB) {
+        if (!hashA || !hashB || hashA.length !== 16 || hashB.length !== 16) return 64;
+        let distance = 0;
+        for (let i = 0; i < 16; i += 4) {
+          const a = parseInt(hashA.substring(i, i + 4), 16);
+          const b = parseInt(hashB.substring(i, i + 4), 16);
+          let xor = a ^ b;
+          while (xor > 0) {
+            xor &= (xor - 1);
+            distance++;
+          }
+        }
+        return distance;
+      }
+
+      // Cluster duplicate photos with Disjoint Set Union & Bucketing
+      function groupDuplicatePhotos(photos, threshold) {
+        const n = photos.length;
+        const parent = new Array(n).fill(0).map((_, i) => i);
+
+        function find(i) {
+          let root = i;
+          while (root !== parent[root]) root = parent[root];
+          let curr = i;
+          while (curr !== root) {
+            const nxt = parent[curr];
+            parent[curr] = root;
+            curr = nxt;
+          }
+          return root;
+        }
+
+        function union(i, j) {
+          const rI = find(i);
+          const rJ = find(j);
+          if (rI !== rJ) parent[rJ] = rI;
+        }
+
+        const buckets = new Map();
+        for (let i = 0; i < n; i++) {
+          const hash = photos[i].hash;
+          if (!hash || hash.length !== 16) continue;
+          for (let b = 0; b < 4; b++) {
+            const key = b + '_' + hash.substring(b * 4, b * 4 + 4);
+            let list = buckets.get(key);
+            if (!list) {
+              list = [];
+              buckets.set(key, list);
+            }
+            list.push(i);
+          }
+        }
+
+        const checkedPairs = new Set();
+        for (const list of buckets.values()) {
+          const len = list.length;
+          if (len < 2) continue;
+          for (let a = 0; a < len; a++) {
+            const idxA = list[a];
+            for (let b = a + 1; b < len; b++) {
+              const idxB = list[b];
+              const minIdx = Math.min(idxA, idxB);
+              const maxIdx = Math.max(idxA, idxB);
+              const pairKey = minIdx * 1000000 + maxIdx;
+              if (checkedPairs.has(pairKey)) continue;
+              checkedPairs.add(pairKey);
+
+              const dist = calculateHammingDistance(photos[minIdx].hash, photos[maxIdx].hash);
+              if (dist <= threshold) {
+                union(minIdx, maxIdx);
+              }
+            }
+          }
+        }
+
+        const rawGroups = new Map();
+        for (let i = 0; i < n; i++) {
+          const root = find(i);
+          let list = rawGroups.get(root);
+          if (!list) {
+            list = [];
+            rawGroups.set(root, list);
+          }
+          list.push(i);
+        }
+
+        const groups = new Map();
+        let groupCounter = 1;
+
+        for (const indices of rawGroups.values()) {
+          if (indices.length <= 1) {
+            const p = photos[indices[0]];
+            p.grupId = null;
+            p.adalahTerbaik = true;
+            continue;
+          }
+
+          const groupId = 'Grup-' + String(groupCounter++).padStart(3, '0');
+          const groupPhotos = indices.map(idx => photos[idx]);
+
+          let bestIndex = 0;
+          let bestScore = -Infinity;
+          let bestExpDist = Infinity;
+
+          for (let i = 0; i < groupPhotos.length; i++) {
+            const p = groupPhotos[i];
+            const score = p.blurScore;
+            const expDist = Math.abs(p.brightness - 128);
+
+            if (score > bestScore * 1.05) {
+              bestScore = score;
+              bestIndex = i;
+              bestExpDist = expDist;
+            } else if (score >= bestScore * 0.95 && expDist < bestExpDist) {
+              bestScore = score;
+              bestIndex = i;
+              bestExpDist = expDist;
+            }
+          }
+
+          for (let i = 0; i < groupPhotos.length; i++) {
+            const p = groupPhotos[i];
+            p.grupId = groupId;
+            p.adalahTerbaik = (i === bestIndex);
+          }
+          groups.set(groupId, groupPhotos);
+        }
+
+        return groups;
+      }
+
+      // Evaluate Photo Status (Keep, Reject, Ragu-ragu) & Category Priority
+      function evaluatePhoto(photo, thresholds) {
+        // Manual override wins over automatic rules
+        if (photo.isManualOverride && photo.manualStatus) {
+          let cat = photo.manualStatus;
+          if (photo.manualStatus === 'Reject') {
+            if (photo.blurScore < thresholds.blurThreshold) cat = 'Reject_Blur';
+            else if (photo.brightness < thresholds.darkThreshold || photo.darkPct > thresholds.darkPctThreshold) cat = 'Reject_Gelap';
+            else if (photo.brightness > thresholds.brightThreshold || photo.brightPct > thresholds.brightPctThreshold) cat = 'Reject_Terang';
+            else if (photo.grupId && !photo.adalahTerbaik) cat = 'Reject_Duplikat';
+            else cat = 'Reject_Manual';
+          }
+          return {
+            status: photo.manualStatus,
+            reasons: ['Koreksi Manual'],
+            kategori: cat,
+          };
+        }
+
+        const reasons = [];
+        const grayReasons = [];
+
+        // 1. Blur
+        const isBlur = photo.blurScore < thresholds.blurThreshold;
+        const isBlurGray = !isBlur && photo.blurScore <= (thresholds.blurThreshold * (1 + thresholds.grayZoneRatio));
+        if (isBlur) reasons.push('Blur');
+        else if (isBlurGray) grayReasons.push('Mendekati Blur');
+
+        // 2. Dark
+        const isDark = photo.brightness < thresholds.darkThreshold || photo.darkPct > thresholds.darkPctThreshold;
+        const isDarkGray = !isDark && (photo.brightness <= thresholds.darkThreshold * (1 + thresholds.grayZoneRatio) || photo.darkPct >= thresholds.darkPctThreshold * (1 - thresholds.grayZoneRatio));
+        if (isDark) reasons.push('Gelap');
+        else if (isDarkGray) grayReasons.push('Agak Gelap');
+
+        // 3. Bright
+        const isBright = photo.brightness > thresholds.brightThreshold || photo.brightPct > thresholds.brightPctThreshold;
+        const isBrightGray = !isBright && (photo.brightness >= thresholds.brightThreshold * (1 - thresholds.grayZoneRatio) || photo.brightPct >= thresholds.brightPctThreshold * (1 - thresholds.grayZoneRatio));
+        if (isBright) reasons.push('Terang');
+        else if (isBrightGray) grayReasons.push('Agak Terang');
+
+        // 4. Duplicate
+        const isDup = !!(photo.grupId && !photo.adalahTerbaik);
+        if (isDup) reasons.push('Duplikat');
+
+        let status = 'Keep';
+        let kategori = 'Keep';
+
+        // Priority: Blur > Gelap > Terang > Duplikat
+        if (reasons.length > 0) {
+          status = 'Reject';
+          if (reasons.includes('Blur')) kategori = 'Reject_Blur';
+          else if (reasons.includes('Gelap')) kategori = 'Reject_Gelap';
+          else if (reasons.includes('Terang')) kategori = 'Reject_Terang';
+          else if (reasons.includes('Duplikat')) kategori = 'Reject_Duplikat';
+          else kategori = 'Reject';
+        } else if (grayReasons.length > 0) {
+          status = 'Ragu-ragu';
+          kategori = 'Ragu-ragu';
+          reasons.push(...grayReasons);
+        } else {
+          status = 'Keep';
+          kategori = 'Keep';
+        }
+
+        return { status, reasons, kategori };
+      }
+
+      function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        const val = bytes / Math.pow(k, i);
+        const formatted = (val >= 100 || i === 0 ? val.toFixed(0) : val.toFixed(1)).replace(/\.0$/, '');
+        return formatted + ' ' + sizes[i];
+      }
+
+      function getDeduplicatedFilename(existingSet, targetFilename) {
+        const lower = targetFilename.toLowerCase();
+        if (!existingSet.has(lower)) {
+          existingSet.add(lower);
+          return targetFilename;
+        }
+
+        const dotIdx = targetFilename.lastIndexOf('.');
+        const baseName = dotIdx !== -1 ? targetFilename.substring(0, dotIdx) : targetFilename;
+        const ext = dotIdx !== -1 ? targetFilename.substring(dotIdx) : '';
+
+        let counter = 1;
+        while (true) {
+          const candidate = baseName + '_' + counter + ext;
+          if (!existingSet.has(candidate.toLowerCase())) {
+            existingSet.add(candidate.toLowerCase());
+            return candidate;
+          }
+          counter++;
+        }
+      }
+
+      /* =========================================================================
+       * 3. LOCAL STORAGE SESSION STORAGE
+       * ========================================================================= */
+      function loadManualOverride(name, size) {
+        try {
+          const key = 'culling_ovr_' + name + '_' + size;
+          const val = localStorage.getItem(key);
+          return val ? JSON.parse(val) : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function saveManualOverride(name, size, status) {
+        try {
+          const key = 'culling_ovr_' + name + '_' + size;
+          if (status) {
+            localStorage.setItem(key, JSON.stringify({ status, time: Date.now() }));
+          } else {
+            localStorage.removeItem(key);
+          }
+        } catch (e) {
+          console.warn('localStorage write failed:', e);
+        }
+      }
+
+      /* =========================================================================
+       * 4. UI NOTIFICATIONS & TOASTS
+       * ========================================================================= */
+      function showToast(message, type) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+
+        let iconColor = type === 'error' ? 'var(--reject)' : type === 'success' ? 'var(--keep)' : 'var(--accent)';
+        toast.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2">
+            ${type === 'error'
+              ? '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>'
+              : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'}
+          </svg>
+          <span>${message}</span>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.transition = 'opacity 0.3s, transform 0.3s';
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(8px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 3500);
+      }
+
+      /* =========================================================================
+       * 5. FOLDER SCANNING & RECURSIVE DISCOVERY
+       * ========================================================================= */
+      async function scanDirectoryEntries(dirHandle, pathPrefix = '') {
+        const found = [];
+        const validExts = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+        for await (const entry of dirHandle.values()) {
+          if (entry.kind === 'file') {
+            const ext = entry.name.split('.').pop()?.toLowerCase();
+            if (validExts.has(ext)) {
+              found.push({
+                fileHandle: entry,
+                name: entry.name,
+                relativePath: pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name,
+              });
+            }
+          } else if (entry.kind === 'directory') {
+            const subPrefix = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+            const subFound = await scanDirectoryEntries(entry, subPrefix);
+            found.push(...subFound);
+          }
+        }
+        return found;
+      }
+
+      async function pickFolder() {
+        if ('showDirectoryPicker' in window) {
+          try {
+            const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+            state.sourceDirectoryHandle = dirHandle;
+            showToast('Membaca struktur folder...', 'info');
+
+            const scanned = await scanDirectoryEntries(dirHandle);
+            if (scanned.length === 0) {
+              showToast('Tidak ada file JPG, PNG, atau WebP yang ditemukan di folder ini.', 'error');
+              return;
+            }
+
+            // Estimate total size
+            let totalBytes = 0;
+            const initialPhotos = [];
+            for (let i = 0; i < scanned.length; i++) {
+              const item = scanned[i];
+              const file = await item.fileHandle.getFile();
+              totalBytes += file.size;
+              initialPhotos.push({
+                id: 'p_' + i,
+                nama: item.name,
+                pathRelatif: item.relativePath,
+                fileHandle: item.fileHandle,
+                file: file,
+                ukuran: file.size,
+                blurScore: 0,
+                brightness: 128,
+                darkPct: 0,
+                brightPct: 0,
+                hash: '',
+                alasan: [],
+                status: 'Keep',
+                kategori: 'Keep',
+              });
+            }
+
+            setupReadyScreen(initialPhotos, totalBytes, dirHandle.name);
+          } catch (err) {
+            if (err.name !== 'AbortError') {
+              console.error(err);
+              showToast('Gagal mengakses folder: ' + err.message, 'error');
+            }
+          }
+        } else {
+          // Fallback input
+          document.getElementById('fallbackFolderInput').click();
+        }
+      }
+
+      function handleFallbackFiles(e) {
+        const files = Array.from(e.target.files);
+        const validExts = new Set(['jpg', 'jpeg', 'png', 'webp']);
+        const validFiles = files.filter(f => validExts.has(f.name.split('.').pop()?.toLowerCase()));
+
+        if (validFiles.length === 0) {
+          showToast('Tidak ada file gambar valid ditemukan.', 'error');
+          return;
+        }
+
+        showToast('Catatan: Fitur simpan langsung ke folder butuh Chrome/Edge desktop.', 'info');
+        let totalBytes = 0;
+        const initialPhotos = validFiles.map((file, idx) => {
+          totalBytes += file.size;
+          return {
+            id: 'p_' + idx,
+            nama: file.name,
+            pathRelatif: file.webkitRelativePath || file.name,
+            file: file,
+            fileHandle: null,
+            ukuran: file.size,
+            blurScore: 0,
+            brightness: 128,
+            darkPct: 0,
+            brightPct: 0,
+            hash: '',
+            alasan: [],
+            status: 'Keep',
+            kategori: 'Keep',
+          };
+        });
+
+        setupReadyScreen(initialPhotos, totalBytes, 'Folder Terpilih');
+      }
+
+      function setupReadyScreen(photos, totalBytes, folderName) {
+        state.photos = photos;
+        document.getElementById('emptyScreen').classList.add('hidden');
+        document.getElementById('workspaceScreen').classList.add('hidden');
+        document.getElementById('progressScreen').classList.add('hidden');
+
+        const readyScreen = document.getElementById('readyScreen');
+        readyScreen.classList.remove('hidden');
+        document.getElementById('readyPathText').textContent = `Folder "${folderName}" berhasil dipindai.`;
+        document.getElementById('readyCount').textContent = photos.length.toLocaleString();
+        document.getElementById('readySize').textContent = formatBytes(totalBytes);
+      }
+
+      /* =========================================================================
+       * 6. DEMO SYNTHESIZED DATASET GENERATOR
+       * ========================================================================= */
+      async function generateDemoDataset() {
+        showToast('Membuat 12 foto sampel simulasi (blur, eksposur, duplikat)...', 'info');
+
+        const demoItems = [
+          { name: 'DSC_4100_Tajam_Terbaik.jpg', type: 'burst1_sharp', brightness: 128 },
+          { name: 'DSC_4101_Burst_Duplikat1.jpg', type: 'burst1_med', brightness: 125 },
+          { name: 'DSC_4102_Burst_Duplikat2.jpg', type: 'burst1_soft', brightness: 122 },
+          { name: 'DSC_4103_Blur_Gerakan.jpg', type: 'blur_heavy', brightness: 120 },
+          { name: 'DSC_4104_Mendekati_Blur.jpg', type: 'blur_borderline', brightness: 125 },
+          { name: 'DSC_4105_Underexposed_Gelap.jpg', type: 'dark_heavy', brightness: 22 },
+          { name: 'DSC_4106_Agak_Gelap_GrayZone.jpg', type: 'dark_borderline', brightness: 48 },
+          { name: 'DSC_4107_Overexposed_Terang.jpg', type: 'bright_heavy', brightness: 232 },
+          { name: 'DSC_4108_Agak_Terang_GrayZone.jpg', type: 'bright_borderline', brightness: 204 },
+          { name: 'DSC_4109_Landscape_Tajam.jpg', type: 'landscape_sharp', brightness: 130 },
+          { name: 'DSC_4110_Landscape_Duplikat.jpg', type: 'landscape_dup', brightness: 128 },
+          { name: 'DSC_4111_Potret_Studio.jpg', type: 'portrait', brightness: 140 },
+        ];
+
+        const photos = [];
+        let totalBytes = 0;
+
+        for (let i = 0; i < demoItems.length; i++) {
+          const item = demoItems[i];
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 480;
+          const ctx = canvas.getContext('2d');
+
+          // 1. Draw base tone
+          ctx.fillStyle = `rgb(${item.brightness}, ${item.brightness}, ${item.brightness})`;
+          ctx.fillRect(0, 0, 640, 480);
+
+          // 2. Distinctive patterns for each type
+          if (item.type.startsWith('burst1_')) {
+            // Group 1: Vertical architectural columns
+            for (let x = 40; x < 600; x += 55) {
+              ctx.fillStyle = item.type === 'burst1_sharp' ? '#0f172a' : '#1e293b';
+              ctx.fillRect(x, 80, 24, 320);
+            }
+            if (item.type === 'burst1_sharp') {
+              // Extra fine sharp crosshairs
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2;
+              for (let y = 100; y < 400; y += 40) {
+                ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(600, y); ctx.stroke();
+              }
+            } else if (item.type === 'burst1_soft') {
+              // Blurrier version
+              ctx.fillStyle = 'rgba(200, 200, 200, 0.4)';
+              ctx.fillRect(0, 0, 640, 480);
+            }
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.fillText(item.name, 40, 50);
+
+          } else if (item.type === 'landscape_sharp' || item.type === 'landscape_dup') {
+            // Group 2: Horizontal stratified landscape bands
+            ctx.fillStyle = '#38bdf8'; // Sky
+            ctx.fillRect(0, 0, 640, 200);
+            ctx.fillStyle = '#0f766e'; // Mountain
+            ctx.beginPath();
+            ctx.moveTo(0, 200);
+            ctx.lineTo(200, 100);
+            ctx.lineTo(400, 180);
+            ctx.lineTo(640, 120);
+            ctx.lineTo(640, 320);
+            ctx.lineTo(0, 320);
+            ctx.fill();
+            ctx.fillStyle = '#0284c7'; // Lake
+            ctx.fillRect(0, 320, 640, 160);
+
+            if (item.type === 'landscape_sharp') {
+              // Crisp trees
+              ctx.fillStyle = '#064e3b';
+              for (let x = 50; x < 600; x += 40) {
+                ctx.fillRect(x, 260, 10, 60);
+              }
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.fillText(item.name, 40, 50);
+
+          } else if (item.type === 'blur_heavy') {
+            // Very smooth gradient with no high frequency edges
+            const grad = ctx.createRadialGradient(320, 240, 20, 320, 240, 300);
+            grad.addColorStop(0, '#777777');
+            grad.addColorStop(1, '#444444');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#666666';
+            ctx.font = '22px sans-serif';
+            ctx.fillText('OUT OF FOCUS / BLUR', 200, 240);
+
+          } else if (item.type === 'blur_borderline') {
+            // Soft blocky shapes
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(100, 120, 440, 240);
+            ctx.fillStyle = '#888888';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.fillText('Mendekati Ambang Blur', 180, 250);
+
+          } else if (item.type === 'dark_heavy') {
+            // Deep dark night scene
+            ctx.fillStyle = '#05070d';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.arc(320, 240, 60, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#64748b';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Underexposed (< 25)', 200, 400);
+
+          } else if (item.type === 'dark_borderline') {
+            // Dark gray zone
+            ctx.fillStyle = '#293245';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(100, 100, 440, 280);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Agak Gelap (Gray Zone)', 200, 240);
+
+          } else if (item.type === 'bright_heavy') {
+            // Overexposed bright blown-out scene
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(100, 100, 440, 280);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Overexposed (> 220)', 210, 240);
+
+          } else if (item.type === 'bright_borderline') {
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(120, 120, 400, 240);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Agak Terang (Gray Zone)', 200, 240);
+
+          } else if (item.type === 'portrait') {
+            // Concentric yellow/purple studio portrait rings
+            ctx.fillStyle = '#312e81';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.arc(320, 220, 100, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#4338ca';
+            ctx.beginPath();
+            ctx.arc(320, 220, 60, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.fillText('Potret Studio Tajam', 210, 400);
+          }
+
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
+          const file = new File([blob], item.name, { type: 'image/jpeg' });
+          totalBytes += file.size;
+
+          photos.push({
+            id: 'demo_' + i,
+            nama: item.name,
+            pathRelatif: 'Sampel/' + item.name,
+            file: file,
+            fileHandle: null,
+            ukuran: file.size,
+            blurScore: 0,
+            brightness: 128,
+            darkPct: 0,
+            brightPct: 0,
+            hash: '',
+            alasan: [],
+            status: 'Keep',
+            kategori: 'Keep',
+          });
+        }
+
+        setupReadyScreen(photos, totalBytes, 'Sampel Demo');
+      }
+
+      /* =========================================================================
+       * 7. IMAGE ANALYSIS ENGINE (Batching & Worker with Graceful Fallback)
+       * ========================================================================= */
+      async function startAnalysis() {
+        if (state.photos.length === 0) return;
+
+        state.isAnalyzing = true;
+        state.isPaused = false;
+        state.cancelRequested = false;
+
+        document.getElementById('readyScreen').classList.add('hidden');
+        document.getElementById('workspaceScreen').classList.add('hidden');
+        const progressScreen = document.getElementById('progressScreen');
+        progressScreen.classList.remove('hidden');
+
+        const total = state.photos.length;
+        const startTime = Date.now();
+        const errors = [];
+        const canvas256 = document.createElement('canvas');
+        canvas256.width = 256;
+        canvas256.height = 256;
+        const ctx256 = canvas256.getContext('2d', { willReadFrequently: true });
+
+        // 9x8 canvas for precise dHash
+        const canvas9x8 = document.createElement('canvas');
+        canvas9x8.width = 9;
+        canvas9x8.height = 8;
+        const ctx9x8 = canvas9x8.getContext('2d', { willReadFrequently: true });
+
+        for (let i = 0; i < total; i++) {
+          if (state.cancelRequested) {
+            showToast('Analisis dibatalkan.', 'error');
+            state.isAnalyzing = false;
+            document.getElementById('progressScreen').classList.add('hidden');
+            document.getElementById('readyScreen').classList.remove('hidden');
+            return;
+          }
+
+          while (state.isPaused) {
+            await new Promise(r => setTimeout(r, 200));
+            if (state.cancelRequested) break;
+          }
+
+          const photo = state.photos[i];
+          document.getElementById('progressCurrentFile').textContent = photo.nama;
+
+          try {
+            // 1. Generate 256px thumbnail via createImageBitmap
+            let bitmap;
+            try {
+              bitmap = await createImageBitmap(photo.file, { resizeWidth: 256, resizeQuality: 'medium' });
+            } catch (err) {
+              // Fallback for formats without native bitmap resize
+              const img = new Image();
+              const tempUrl = URL.createObjectURL(photo.file);
+              await new Promise((res, rej) => {
+                img.onload = res;
+                img.onerror = rej;
+                img.src = tempUrl;
+              });
+              canvas256.width = 256;
+              canvas256.height = Math.round((img.height / img.width) * 256) || 256;
+              ctx256.drawImage(img, 0, 0, canvas256.width, canvas256.height);
+              URL.revokeObjectURL(tempUrl);
+              photo.lebar = img.naturalWidth;
+              photo.tinggi = img.naturalHeight;
+            }
+
+            if (bitmap) {
+              canvas256.width = bitmap.width;
+              canvas256.height = bitmap.height;
+              ctx256.drawImage(bitmap, 0, 0);
+              photo.lebar = bitmap.width;
+              photo.tinggi = bitmap.height;
+              bitmap.close(); // Clean memory immediately
+            }
+
+            // Save small thumbnail Blob URL
+            const thumbBlob = await new Promise(r => canvas256.toBlob(r, 'image/jpeg', 0.8));
+            photo.thumbUrl = URL.createObjectURL(thumbBlob);
+
+            // 2. Compute Grayscale & Laplacian Variance
+            const imgData256 = ctx256.getImageData(0, 0, canvas256.width, canvas256.height);
+            const rgba = imgData256.data;
+            const w = canvas256.width;
+            const h = canvas256.height;
+            const gray256 = new Uint8Array(w * h);
+
+            for (let p = 0; p < gray256.length; p++) {
+              const off = p * 4;
+              gray256[p] = Math.round(0.299 * rgba[off] + 0.587 * rgba[off + 1] + 0.114 * rgba[off + 2]);
+            }
+            photo.blurScore = calculateLaplacianVariance(gray256, w, h);
+
+            // 3. Compute Exposure Statistics
+            const expStats = calculateExposureStats(rgba, w * h);
+            photo.brightness = expStats.meanBrightness;
+            photo.darkPct = expStats.darkPct;
+            photo.brightPct = expStats.brightPct;
+
+            // 4. Compute 64-bit dHash (Resize to 9x8)
+            ctx9x8.drawImage(canvas256, 0, 0, 9, 8);
+            const imgData9x8 = ctx9x8.getImageData(0, 0, 9, 8);
+            const rgba9x8 = imgData9x8.data;
+            const gray9x8 = new Uint8Array(72);
+            for (let p = 0; p < 72; p++) {
+              const off = p * 4;
+              gray9x8[p] = Math.round(0.299 * rgba9x8[off] + 0.587 * rgba9x8[off + 1] + 0.114 * rgba9x8[off + 2]);
+            }
+            photo.hash = calculateDHashFrom9x8(gray9x8);
+
+            // Check if user already had manual override in previous session
+            const stored = loadManualOverride(photo.nama, photo.ukuran);
+            if (stored && stored.status) {
+              photo.isManualOverride = true;
+              photo.manualStatus = stored.status;
+            }
+
+          } catch (err) {
+            console.warn('Error processing photo:', photo.nama, err);
+            errors.push({ name: photo.nama, error: err.message });
+          }
+
+          // Update Progress HUD
+          const processed = i + 1;
+          const pct = Math.round((processed / total) * 100);
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const speed = elapsedSec > 0 ? (processed / elapsedSec).toFixed(1) : '0';
+          const remainingSec = speed > 0 ? Math.round((total - processed) / speed) : 0;
+          const etaMinutes = Math.floor(remainingSec / 60);
+          const etaSeconds = remainingSec % 60;
+          const etaText = `${String(etaMinutes).padStart(2, '0')}:${String(etaSeconds).padStart(2, '0')}`;
+
+          document.getElementById('progressBarFill').style.width = pct + '%';
+          document.getElementById('progressCountText').textContent = `${processed} / ${total}`;
+          document.getElementById('progressPctText').textContent = `${pct}%`;
+          document.getElementById('progressSpeedText').textContent = `${speed} foto/detik`;
+          document.getElementById('progressETAText').textContent = etaText;
+
+          // Yield execution to keep UI responsive
+          if (i % 2 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+
+        // Show errors if any
+        if (errors.length > 0) {
+          const errorLogBox = document.getElementById('errorLogBox');
+          errorLogBox.classList.remove('hidden');
+          document.getElementById('errorCount').textContent = errors.length;
+          const list = document.getElementById('errorList');
+          list.innerHTML = errors.map(e => `<li>${e.name}: ${e.error}</li>`).join('');
+        }
+
+        // 5. Cluster Duplicate Photos
+        groupDuplicatePhotos(state.photos, state.thresholds.similarityThreshold);
+
+        // 6. Evaluate all photos according to thresholds & priority
+        reEvaluateAllPhotos();
+
+        state.isAnalyzing = false;
+        document.getElementById('progressScreen').classList.add('hidden');
+        document.getElementById('workspaceScreen').classList.remove('hidden');
+        document.getElementById('statsBar').classList.remove('hidden');
+        document.getElementById('btnExportFolders').classList.remove('hidden');
+        document.getElementById('btnExportCSV').classList.remove('hidden');
+
+        showToast(`Analisis selesai! ${total} foto siap direview.`, 'success');
+        renderWorkspace();
+      }
+
+      /* =========================================================================
+       * 8. REAL-TIME EVALUATION & RE-INDEXING (Without Re-analyzing Images)
+       * ========================================================================= */
+      function reEvaluateAllPhotos() {
+        // Re-group duplicates based on current similarity threshold
+        groupDuplicatePhotos(state.photos, state.thresholds.similarityThreshold);
+
+        for (const photo of state.photos) {
+          const evalRes = evaluatePhoto(photo, state.thresholds);
+          photo.status = evalRes.status;
+          photo.reasons = evalRes.reasons;
+          photo.kategori = evalRes.kategori;
+        }
+
+        updateHeaderStats();
+      }
+
+      function updateHeaderStats() {
+        let keep = 0, reject = 0, doubt = 0;
+        let blur = 0, dark = 0, bright = 0, dup = 0;
+
+        for (const p of state.photos) {
+          if (p.status === 'Keep') keep++;
+          else if (p.status === 'Reject') reject++;
+          else if (p.status === 'Ragu-ragu') doubt++;
+
+          if (p.reasons?.includes('Blur')) blur++;
+          if (p.reasons?.includes('Gelap')) dark++;
+          if (p.reasons?.includes('Terang')) bright++;
+          if (p.reasons?.includes('Duplikat')) dup++;
+        }
+
+        document.getElementById('statTotal').textContent = state.photos.length;
+        document.getElementById('statKeep').textContent = keep;
+        document.getElementById('statReject').textContent = reject;
+        document.getElementById('statDoubt').textContent = doubt;
+
+        document.getElementById('pillAll').textContent = state.photos.length;
+        document.getElementById('pillKeep').textContent = keep;
+        document.getElementById('pillReject').textContent = reject;
+        document.getElementById('pillDoubt').textContent = doubt;
+        document.getElementById('pillBlur').textContent = blur;
+        document.getElementById('pillDark').textContent = dark;
+        document.getElementById('pillBright').textContent = bright;
+        document.getElementById('pillDup').textContent = dup;
+      }
+
+      /* =========================================================================
+       * 9. WORKSPACE RENDERING & VIRTUALIZED SCROLLING
+       * ========================================================================= */
+      function getFilteredAndSortedPhotos() {
+        let list = state.photos.slice();
+
+        // 1. Filter
+        const filter = state.currentFilter;
+        if (filter !== 'all') {
+          if (filter === 'Keep' || filter === 'Reject' || filter === 'Ragu-ragu') {
+            list = list.filter(p => p.status === filter);
+          } else if (filter === 'Blur') {
+            list = list.filter(p => p.reasons?.includes('Blur'));
+          } else if (filter === 'Gelap') {
+            list = list.filter(p => p.reasons?.includes('Gelap'));
+          } else if (filter === 'Terang') {
+            list = list.filter(p => p.reasons?.includes('Terang'));
+          } else if (filter === 'Duplikat') {
+            list = list.filter(p => p.reasons?.includes('Duplikat'));
+          }
+        }
+
+        // 2. Sort
+        const sort = state.currentSort;
+        list.sort((a, b) => {
+          if (sort === 'name_asc') return a.nama.localeCompare(b.nama);
+          if (sort === 'name_desc') return b.nama.localeCompare(a.nama);
+          if (sort === 'blur_asc') return a.blurScore - b.blurScore;
+          if (sort === 'blur_desc') return b.blurScore - a.blurScore;
+          if (sort === 'bright_asc') return a.brightness - b.brightness;
+          if (sort === 'bright_desc') return b.brightness - a.brightness;
+          if (sort === 'size_desc') return b.ukuran - a.ukuran;
+          if (sort === 'group') {
+            const gA = a.grupId || 'ZZZ';
+            const gB = b.grupId || 'ZZZ';
+            return gA.localeCompare(gB);
+          }
+          return 0;
+        });
+
+        return list;
+      }
+
+      function renderWorkspace() {
+        state.filteredPhotosCache = getFilteredAndSortedPhotos();
+        state.renderedCount = 0;
+
+        if (state.viewMode === 'grid') {
+          document.getElementById('gridContainer').classList.remove('hidden');
+          document.getElementById('duplicateGroupsContainer').classList.add('hidden');
+          document.getElementById('gridContainer').innerHTML = '';
+          appendMoreCards();
+        } else {
+          document.getElementById('gridContainer').classList.add('hidden');
+          document.getElementById('duplicateGroupsContainer').classList.remove('hidden');
+          renderDuplicateGroups();
+        }
+
+        updateSelectionBar();
+      }
+
+      function appendMoreCards() {
+        const grid = document.getElementById('gridContainer');
+        const list = state.filteredPhotosCache;
+        const start = state.renderedCount;
+        const end = Math.min(start + state.pageSize, list.length);
+
+        if (start >= list.length) {
+          document.getElementById('loadMoreText').textContent = list.length === 0 ? 'Tidak ada foto yang cocok dengan filter.' : `Semua ${list.length} foto telah ditampilkan.`;
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        for (let i = start; i < end; i++) {
+          const photo = list[i];
+          const card = createPhotoCardElement(photo, i);
+          fragment.appendChild(card);
+        }
+        grid.appendChild(fragment);
+        state.renderedCount = end;
+
+        document.getElementById('loadMoreText').textContent = `Menampilkan ${end} dari ${list.length} foto`;
+      }
+
+      function createPhotoCardElement(photo, index) {
+        const card = document.createElement('div');
+        const statusClass = photo.status === 'Keep' ? 'card-keep' : photo.status === 'Reject' ? 'card-reject' : 'card-doubt';
+        const isSelected = state.selectedIds.has(photo.id);
+
+        card.className = `photo-card ${statusClass} ${isSelected ? 'is-selected' : ''}`;
+        card.id = `card_${photo.id}`;
+        card.dataset.id = photo.id;
+
+        // Status badge
+        const badgeClass = photo.status === 'Keep' ? 'badge-keep' : photo.status === 'Reject' ? 'badge-reject' : 'badge-doubt';
+
+        // Reason labels
+        let reasonsHtml = '';
+        if (photo.reasons && photo.reasons.length > 0) {
+          reasonsHtml = `<span class="badge" style="background: rgba(0,0,0,0.6); color: #e2e8f0; font-size: 10px;">${photo.reasons[0]}</span>`;
+        }
+        if (photo.adalahTerbaik && photo.grupId) {
+          reasonsHtml = `<span class="badge badge-gold">⭐ Terbaik</span>` + reasonsHtml;
+        }
+
+        card.innerHTML = `
+          <div class="card-thumb-wrap">
+            <img class="card-thumb" src="${photo.thumbUrl || ''}" alt="${photo.nama}" loading="lazy" />
+
+            <div class="thumb-overlay-top">
+              <span class="badge ${badgeClass}">${photo.status}</span>
+              <div style="display: flex; gap: 4px;">${reasonsHtml}</div>
+            </div>
+
+            <div class="thumb-overlay-bottom">
+              <label class="select-checkbox-wrap" onclick="event.stopPropagation()">
+                <input type="checkbox" class="select-checkbox" data-id="${photo.id}" ${isSelected ? 'checked' : ''} aria-label="Pilih foto ${photo.nama}" />
+              </label>
+            </div>
+
+            <div class="card-quick-actions">
+              <button class="quick-btn quick-keep" data-id="${photo.id}" data-action="Keep" title="Keep (K)" onclick="event.stopPropagation()">✔</button>
+              <button class="quick-btn quick-reject" data-id="${photo.id}" data-action="Reject" title="Reject (X)" onclick="event.stopPropagation()">✖</button>
+              <button class="quick-btn quick-doubt" data-id="${photo.id}" data-action="Ragu-ragu" title="Ragu (R)" onclick="event.stopPropagation()">?</button>
+            </div>
+          </div>
+
+          <div class="card-meta">
+            <div class="card-name" title="${photo.nama}">${photo.nama}</div>
+            <div class="card-specs">
+              <span>${formatBytes(photo.ukuran)}</span>
+              <span>${photo.grupId || ''}</span>
+            </div>
+            <div class="metric-pills">
+              <span class="metric-pill" title="Skor Blur Laplacian (Semakin tinggi semakin tajam)">🔍 ${photo.blurScore}</span>
+              <span class="metric-pill" title="Kecerahan Rata-rata (0-255)">☀️ ${photo.brightness}</span>
+            </div>
+          </div>
+        `;
+
+        // Card click -> Open Lightbox Viewer
+        card.addEventListener('click', (e) => {
+          // If shift or ctrl is held, toggle selection instead
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            toggleSelectPhoto(photo.id);
+          } else {
+            openPhotoViewer(photo.id);
+          }
+        });
+
+        // Quick action buttons
+        const keepBtn = card.querySelector('.quick-keep');
+        const rejectBtn = card.querySelector('.quick-reject');
+        const doubtBtn = card.querySelector('.quick-doubt');
+        const chk = card.querySelector('.select-checkbox');
+
+        keepBtn.addEventListener('click', () => setManualStatus(photo.id, 'Keep'));
+        rejectBtn.addEventListener('click', () => setManualStatus(photo.id, 'Reject'));
+        doubtBtn.addEventListener('click', () => setManualStatus(photo.id, 'Ragu-ragu'));
+
+        chk.addEventListener('change', (e) => {
+          e.stopPropagation();
+          toggleSelectPhoto(photo.id);
+        });
+
+        return card;
+      }
+
+      function renderDuplicateGroups() {
+        const container = document.getElementById('duplicateGroupsContainer');
+        container.innerHTML = '';
+
+        // Group photos by grupId
+        const groupMap = new Map();
+        for (const p of state.photos) {
+          if (!p.grupId) continue;
+          let list = groupMap.get(p.grupId);
+          if (!list) {
+            list = [];
+            groupMap.set(p.grupId, list);
+          }
+          list.push(p);
+        }
+
+        if (groupMap.size === 0) {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-dim);">
+              <h3>Tidak ada kelompok duplikat yang terdeteksi</h3>
+              <p style="font-size: 13px; margin-top: 6px;">Coba naikkan slider "Jarak Kemiripan Duplikat" di menu Sensitivitas Ambang jika ingin mencakup foto yang agak berbeda.</p>
+            </div>
+          `;
+          return;
+        }
+
+        for (const [groupId, photosInGroup] of groupMap.entries()) {
+          const groupCard = document.createElement('div');
+          groupCard.className = 'group-container';
+
+          const best = photosInGroup.find(p => p.adalahTerbaik);
+
+          groupCard.innerHTML = `
+            <div class="group-header">
+              <div class="group-title">
+                <span class="badge badge-gold">⭐ ${groupId}</span>
+                <span style="font-size: 13px; color: var(--text-muted);">${photosInGroup.length} Foto Mirip</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-outline btn-sm btn-pick-best" data-group="${groupId}">
+                  Simpan Terbaik Saja (Reject Lainnya)
+                </button>
+              </div>
+            </div>
+            <div class="group-photos-row" id="group_row_${groupId}"></div>
+          `;
+
+          const row = groupCard.querySelector(`#group_row_${groupId}`);
+          for (const p of photosInGroup) {
+            row.appendChild(createPhotoCardElement(p));
+          }
+
+          groupCard.querySelector('.btn-pick-best').addEventListener('click', () => {
+            for (const p of photosInGroup) {
+              setManualStatus(p.id, p.adalahTerbaik ? 'Keep' : 'Reject');
+            }
+            showToast(`${groupId}: Foto terbaik disimpan sebagai Keep, sisanya Reject.`, 'success');
+          });
+
+          container.appendChild(groupCard);
+        }
+      }
+
+      /* =========================================================================
+       * 10. MANUAL STATUS OVERRIDE & BATCH ACTIONS
+       * ========================================================================= */
+      function setManualStatus(photoId, newStatus) {
+        const photo = state.photos.find(p => p.id === photoId);
+        if (!photo) return;
+
+        photo.isManualOverride = true;
+        photo.manualStatus = newStatus;
+        photo.status = newStatus;
+        photo.reasons = ['Koreksi Manual'];
+
+        if (newStatus === 'Reject') {
+          if (photo.blurScore < state.thresholds.blurThreshold) photo.kategori = 'Reject_Blur';
+          else if (photo.brightness < state.thresholds.darkThreshold || photo.darkPct > state.thresholds.darkPctThreshold) photo.kategori = 'Reject_Gelap';
+          else if (photo.brightness > state.thresholds.brightThreshold || photo.brightPct > state.thresholds.brightPctThreshold) photo.kategori = 'Reject_Terang';
+          else if (photo.grupId && !photo.adalahTerbaik) photo.kategori = 'Reject_Duplikat';
+          else photo.kategori = 'Reject_Manual';
+        } else {
+          photo.kategori = newStatus;
+        }
+
+        saveManualOverride(photo.nama, photo.ukuran, newStatus);
+        updateHeaderStats();
+        updateCardDOM(photo);
+
+        // If viewer is currently showing this photo, update viewer header
+        if (state.activeViewerIndex >= 0 && state.photos[state.activeViewerIndex]?.id === photoId) {
+          updateViewerHeader(photo);
+        }
+      }
+
+      function updateCardDOM(photo) {
+        const card = document.getElementById(`card_${photo.id}`);
+        if (!card) return;
+
+        card.className = card.className
+          .replace(/card-keep|card-reject|card-doubt/g, '')
+          .trim();
+        const statusClass = photo.status === 'Keep' ? 'card-keep' : photo.status === 'Reject' ? 'card-reject' : 'card-doubt';
+        card.classList.add(statusClass);
+
+        const badge = card.querySelector('.thumb-overlay-top .badge');
+        if (badge) {
+          badge.className = 'badge ' + (photo.status === 'Keep' ? 'badge-keep' : photo.status === 'Reject' ? 'badge-reject' : 'badge-doubt');
+          badge.textContent = photo.status;
+        }
+      }
+
+      function toggleSelectPhoto(photoId) {
+        if (state.selectedIds.has(photoId)) {
+          state.selectedIds.delete(photoId);
+        } else {
+          state.selectedIds.add(photoId);
+        }
+        updateSelectionBar();
+
+        const card = document.getElementById(`card_${photoId}`);
+        if (card) {
+          const chk = card.querySelector('.select-checkbox');
+          if (chk) chk.checked = state.selectedIds.has(photoId);
+          card.classList.toggle('is-selected', state.selectedIds.has(photoId));
+        }
+      }
+
+      function updateSelectionBar() {
+        const bar = document.getElementById('selectionBar');
+        const count = state.selectedIds.size;
+        if (count > 0) {
+          bar.classList.remove('hidden');
+          document.getElementById('selectedCountText').textContent = `${count} foto dipilih`;
+        } else {
+          bar.classList.add('hidden');
+        }
+      }
+
+      function batchSetStatus(newStatus) {
+        for (const id of state.selectedIds) {
+          setManualStatus(id, newStatus);
+        }
+        showToast(`${state.selectedIds.size} foto diubah statusnya menjadi ${newStatus}.`, 'success');
+        state.selectedIds.clear();
+        updateSelectionBar();
+      }
+
+      /* =========================================================================
+       * 11. LIGHTBOX PHOTO VIEWER (Full Res On Demand, Keyboard Navigation)
+       * ========================================================================= */
+      function openPhotoViewer(photoId) {
+        const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+        const idx = list.findIndex(p => p.id === photoId);
+        if (idx === -1) return;
+
+        state.activeViewerIndex = idx;
+        const modal = document.getElementById('viewerModal');
+        modal.classList.remove('hidden');
+
+        loadViewerPhoto(idx);
+      }
+
+      function loadViewerPhoto(index) {
+        const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+        if (index < 0 || index >= list.length) return;
+
+        state.activeViewerIndex = index;
+        const photo = list[index];
+
+        const img = document.getElementById('viewerImage');
+        img.classList.remove('is-zoomed');
+
+        // Load full file URL on demand
+        if (img._currentObjectUrl) {
+          URL.revokeObjectURL(img._currentObjectUrl);
+        }
+        const fullUrl = URL.createObjectURL(photo.file);
+        img._currentObjectUrl = fullUrl;
+        img.src = fullUrl;
+
+        updateViewerHeader(photo);
+
+        document.getElementById('viewerIndexText').textContent = `${index + 1} dari ${list.length}`;
+        document.getElementById('infoName').textContent = photo.nama;
+        document.getElementById('infoSize').textContent = formatBytes(photo.ukuran);
+        document.getElementById('infoResolution').textContent = photo.lebar ? `${photo.lebar} × ${photo.tinggi} px` : '--';
+        document.getElementById('infoPath').textContent = photo.pathRelatif || photo.nama;
+
+        document.getElementById('infoBlur').textContent = photo.blurScore;
+        document.getElementById('infoBrightness').textContent = photo.brightness;
+        document.getElementById('infoDarkPct').textContent = `${photo.darkPct}%`;
+        document.getElementById('infoBrightPct').textContent = `${photo.brightPct}%`;
+        document.getElementById('infoGroup').textContent = photo.grupId || 'Bukan duplikat';
+        document.getElementById('infoIsBest').textContent = photo.adalahTerbaik ? 'Ya (Skor Terbaik)' : 'Tidak';
+
+        const reasonsList = document.getElementById('infoReasonsList');
+        reasonsList.innerHTML = '';
+        if (photo.reasons && photo.reasons.length > 0) {
+          photo.reasons.forEach(r => {
+            const badge = document.createElement('span');
+            badge.className = 'badge ' + (photo.status === 'Keep' ? 'badge-keep' : photo.status === 'Reject' ? 'badge-reject' : 'badge-doubt');
+            badge.textContent = r;
+            reasonsList.appendChild(badge);
+          });
+        } else {
+          reasonsList.innerHTML = '<span style="font-size: 12px; color: var(--keep);">Foto memenuhi kriteria kualitas</span>';
+        }
+      }
+
+      function updateViewerHeader(photo) {
+        document.getElementById('viewerFileName').textContent = photo.nama;
+        const badge = document.getElementById('viewerStatusBadge');
+        badge.className = 'badge ' + (photo.status === 'Keep' ? 'badge-keep' : photo.status === 'Reject' ? 'badge-reject' : 'badge-doubt');
+        badge.textContent = photo.status;
+      }
+
+      function closePhotoViewer() {
+        const modal = document.getElementById('viewerModal');
+        modal.classList.add('hidden');
+        const img = document.getElementById('viewerImage');
+        if (img._currentObjectUrl) {
+          URL.revokeObjectURL(img._currentObjectUrl);
+          img._currentObjectUrl = null;
+          img.src = '';
+        }
+        state.activeViewerIndex = -1;
+      }
+
+      function nextViewerPhoto() {
+        const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+        if (state.activeViewerIndex < list.length - 1) {
+          loadViewerPhoto(state.activeViewerIndex + 1);
+        }
+      }
+
+      function prevViewerPhoto() {
+        if (state.activeViewerIndex > 0) {
+          loadViewerPhoto(state.activeViewerIndex - 1);
+        }
+      }
+
+      /* =========================================================================
+       * 12. EXPORT TO CATEGORIZED FOLDERS (Streaming Pipe without RAM Bloat)
+       * ========================================================================= */
+      function openExportModal() {
+        let keepCount = 0, blurCount = 0, darkCount = 0, brightCount = 0, dupCount = 0, doubtCount = 0;
+        let totalBytesToWrite = 0;
+
+        for (const p of state.photos) {
+          totalBytesToWrite += p.ukuran;
+          if (p.kategori === 'Keep') keepCount++;
+          else if (p.kategori === 'Reject_Blur') blurCount++;
+          else if (p.kategori === 'Reject_Gelap') darkCount++;
+          else if (p.kategori === 'Reject_Terang') brightCount++;
+          else if (p.kategori === 'Reject_Duplikat') dupCount++;
+          else if (p.kategori === 'Ragu-ragu') doubtCount++;
+          else keepCount++;
+        }
+
+        document.getElementById('exportCountKeep').textContent = `${keepCount} file`;
+        document.getElementById('exportCountBlur').textContent = `${blurCount} file`;
+        document.getElementById('exportCountDark').textContent = `${darkCount} file`;
+        document.getElementById('exportCountBright').textContent = `${brightCount} file`;
+        document.getElementById('exportCountDup').textContent = `${dupCount} file`;
+        document.getElementById('exportCountDoubt').textContent = `${doubtCount} file`;
+        document.getElementById('exportTotalSize').textContent = formatBytes(totalBytesToWrite);
+
+        document.getElementById('exportProgressBox').classList.add('hidden');
+        document.getElementById('exportModal').classList.remove('hidden');
+      }
+
+      async function runFolderExport() {
+        if (!('showDirectoryPicker' in window)) {
+          showToast('Fitur penulisan folder membutuhkan browser Chrome atau Edge desktop.', 'error');
+          return;
+        }
+
+        try {
+          const destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          const includeRejects = document.getElementById('checkIncludeRejects').checked;
+          const preserveSubfolders = document.getElementById('checkPreserveSubfolders').checked;
+
+          const progressBox = document.getElementById('exportProgressBox');
+          progressBox.classList.remove('hidden');
+          const statusText = document.getElementById('exportProgressStatus');
+          const pctText = document.getElementById('exportProgressPct');
+          const barFill = document.getElementById('exportProgressBarFill');
+
+          const eligiblePhotos = state.photos.filter(p => {
+            if (!includeRejects && p.status === 'Reject') return false;
+            return true;
+          });
+
+          if (eligiblePhotos.length === 0) {
+            showToast('Tidak ada foto yang memenuhi kriteria ekspor.', 'error');
+            return;
+          }
+
+          // Folder Handles Cache
+          const folderHandles = new Map();
+          async function getTargetSubfolder(category, relativeSubdir) {
+            const pathKey = category + (relativeSubdir ? '/' + relativeSubdir : '');
+            if (folderHandles.has(pathKey)) return folderHandles.get(pathKey);
+
+            let currHandle = await destDirHandle.getDirectoryHandle(category, { create: true });
+            if (preserveSubfolders && relativeSubdir) {
+              const segments = relativeSubdir.split('/').filter(Boolean);
+              for (const seg of segments) {
+                currHandle = await currHandle.getDirectoryHandle(seg, { create: true });
+              }
+            }
+            folderHandles.set(pathKey, currHandle);
+            return currHandle;
+          }
+
+          const existingNamesPerFolder = new Map();
+          let copiedCount = 0;
+          const failedFiles = [];
+
+          for (let i = 0; i < eligiblePhotos.length; i++) {
+            const photo = eligiblePhotos[i];
+            const pct = Math.round(((i + 1) / eligiblePhotos.length) * 100);
+            statusText.textContent = `Menyalin (${i + 1}/${eligiblePhotos.length}): ${photo.nama}`;
+            pctText.textContent = pct + '%';
+            barFill.style.width = pct + '%';
+
+            try {
+              // Extract subfolder if needed
+              let relativeSubdir = '';
+              if (preserveSubfolders && photo.pathRelatif && photo.pathRelatif.includes('/')) {
+                relativeSubdir = photo.pathRelatif.substring(0, photo.pathRelatif.lastIndexOf('/'));
+              }
+
+              const targetFolder = await getTargetSubfolder(photo.kategori, relativeSubdir);
+              const folderKey = photo.kategori + '/' + relativeSubdir;
+              let existingSet = existingNamesPerFolder.get(folderKey);
+              if (!existingSet) {
+                existingSet = new Set();
+                existingNamesPerFolder.set(folderKey, existingSet);
+              }
+
+              const destFilename = getDeduplicatedFilename(existingSet, photo.nama);
+              const destFileHandle = await targetFolder.getFileHandle(destFilename, { create: true });
+              const writableStream = await destFileHandle.createWritable();
+
+              // Use stream pipeTo to prevent RAM spike
+              await photo.file.stream().pipeTo(writableStream);
+              copiedCount++;
+            } catch (err) {
+              console.warn('Gagal menyalin:', photo.nama, err);
+              failedFiles.push({ name: photo.nama, error: err.message });
+            }
+          }
+
+          document.getElementById('exportModal').classList.add('hidden');
+          if (failedFiles.length === 0) {
+            showToast(`Sukses! ${copiedCount} file berhasil dipisahkan ke folder.`, 'success');
+          } else {
+            showToast(`${copiedCount} file disalin. ${failedFiles.length} file gagal disalin.`, 'error');
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.error('Export error:', err);
+            showToast('Gagal melakukan ekspor: ' + err.message, 'error');
+          }
+        }
+      }
+
+      /* =========================================================================
+       * 13. CSV REPORT EXPORT
+       * ========================================================================= */
+      function exportCSVReport() {
+        if (state.photos.length === 0) {
+          showToast('Tidak ada data foto untuk diekspor.', 'error');
+          return;
+        }
+
+        const headers = [
+          'Nama File',
+          'Path Relatif',
+          'Status',
+          'Kategori Folder',
+          'Skor Blur',
+          'Rata-rata Kecerahan',
+          'Piksel Gelap (%)',
+          'Piksel Terang (%)',
+          'ID Grup Duplikat',
+          'Terbaik di Grup',
+          'Ukuran File (Bytes)',
+          'Alasan / Catatan',
+        ];
+
+        const rows = state.photos.map(p => {
+          const alasanStr = (p.reasons || []).join('; ');
+          const fields = [
+            p.nama,
+            p.pathRelatif || p.nama,
+            p.status,
+            p.kategori,
+            String(p.blurScore),
+            String(p.brightness),
+            String(p.darkPct),
+            String(p.brightPct),
+            p.grupId || '-',
+            p.adalahTerbaik ? 'Ya' : 'Tidak',
+            String(p.ukuran),
+            alasanStr,
+          ];
+
+          return fields.map(val => {
+            const str = String(val ?? '');
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          }).join(',');
+        });
+
+        // Add UTF-8 BOM
+        const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `laporan_culling_foto_${dateStr}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Laporan CSV berhasil diunduh.', 'success');
+      }
+
+      /* =========================================================================
+       * 14. STANDALONE HTML FILE DOWNLOAD
+       * ========================================================================= */
+      function downloadStandaloneHTML() {
+        const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'PhotoCullingStudio.html';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('File HTML mandiri berhasil diunduh! Buka kapan saja di Chrome/Edge.', 'success');
+      }
+
+      /* =========================================================================
+       * 15. EVENT LISTENERS & KEYBOARD SHORTCUTS
+       * ========================================================================= */
+      function setupEventListeners() {
+        // Folder selection
+        document.getElementById('btnPickFolder').addEventListener('click', pickFolder);
+        document.getElementById('btnHeroPickFolder').addEventListener('click', pickFolder);
+        document.getElementById('fallbackFolderInput').addEventListener('change', handleFallbackFiles);
+
+        // Demo sample
+        document.getElementById('btnLoadDemo').addEventListener('click', generateDemoDataset);
+        document.getElementById('btnHeroDemo').addEventListener('click', generateDemoDataset);
+
+        // Ready screen buttons
+        document.getElementById('btnStartAnalysis').addEventListener('click', startAnalysis);
+        document.getElementById('btnCancelScan').addEventListener('click', () => {
+          document.getElementById('readyScreen').classList.add('hidden');
+          document.getElementById('emptyScreen').classList.remove('hidden');
+        });
+
+        // Progress screen buttons
+        document.getElementById('btnPauseResume').addEventListener('click', (e) => {
+          state.isPaused = !state.isPaused;
+          e.target.textContent = state.isPaused ? 'Lanjut' : 'Jeda';
+        });
+        document.getElementById('btnCancelAnalysis').addEventListener('click', () => {
+          state.cancelRequested = true;
+        });
+
+        // Filter tabs
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            state.currentFilter = tab.dataset.filter;
+            renderWorkspace();
+          });
+        });
+
+        // Sorting
+        document.getElementById('sortSelect').addEventListener('change', (e) => {
+          state.currentSort = e.target.value;
+          renderWorkspace();
+        });
+
+        // View mode toggle (Grid vs Duplicate groups)
+        document.getElementById('btnToggleViewMode').addEventListener('click', () => {
+          state.viewMode = state.viewMode === 'grid' ? 'groups' : 'grid';
+          document.getElementById('viewModeText').textContent = state.viewMode === 'grid' ? 'Mode Grup' : 'Mode Grid';
+          renderWorkspace();
+        });
+
+        // Threshold Sliders Drawer
+        document.getElementById('btnToggleSliders').addEventListener('click', () => {
+          document.getElementById('thresholdPanel').classList.toggle('hidden');
+        });
+
+        // Sliders Realtime Updates
+        const sBlur = document.getElementById('sliderBlur');
+        const sDark = document.getElementById('sliderDark');
+        const sBright = document.getElementById('sliderBright');
+        const sSim = document.getElementById('sliderSimilarity');
+        const sGray = document.getElementById('sliderGrayZone');
+
+        function onSliderChanged() {
+          state.thresholds.blurThreshold = Number(sBlur.value);
+          state.thresholds.darkThreshold = Number(sDark.value);
+          state.thresholds.brightThreshold = Number(sBright.value);
+          state.thresholds.similarityThreshold = Number(sSim.value);
+          state.thresholds.grayZoneRatio = Number(sGray.value) / 100;
+
+          document.getElementById('valBlur').textContent = sBlur.value;
+          document.getElementById('valDark').textContent = sDark.value;
+          document.getElementById('valBright').textContent = sBright.value;
+          document.getElementById('valSimilarity').textContent = sSim.value;
+          document.getElementById('valGrayZone').textContent = sGray.value + '%';
+
+          reEvaluateAllPhotos();
+          renderWorkspace();
+        }
+
+        sBlur.addEventListener('input', onSliderChanged);
+        sDark.addEventListener('input', onSliderChanged);
+        sBright.addEventListener('input', onSliderChanged);
+        sSim.addEventListener('input', onSliderChanged);
+        sGray.addEventListener('input', onSliderChanged);
+
+        document.getElementById('btnResetThresholds').addEventListener('click', () => {
+          sBlur.value = 80;
+          sDark.value = 45;
+          sBright.value = 210;
+          sSim.value = 8;
+          sGray.value = 15;
+          onSliderChanged();
+        });
+
+        // Batch Action buttons
+        document.getElementById('btnBatchKeep').addEventListener('click', () => batchSetStatus('Keep'));
+        document.getElementById('btnBatchReject').addEventListener('click', () => batchSetStatus('Reject'));
+        document.getElementById('btnBatchDoubt').addEventListener('click', () => batchSetStatus('Ragu-ragu'));
+        document.getElementById('btnSelectAll').addEventListener('click', () => {
+          const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+          list.forEach(p => state.selectedIds.add(p.id));
+          renderWorkspace();
+        });
+        document.getElementById('btnClearSelection').addEventListener('click', () => {
+          state.selectedIds.clear();
+          renderWorkspace();
+        });
+
+        // Viewer Lightbox controls
+        document.getElementById('btnViewerClose').addEventListener('click', closePhotoViewer);
+        document.getElementById('btnViewerPrev').addEventListener('click', prevViewerPhoto);
+        document.getElementById('btnViewerNext').addEventListener('click', nextViewerPhoto);
+        document.getElementById('btnViewerKeep').addEventListener('click', () => {
+          const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+          if (state.activeViewerIndex >= 0 && list[state.activeViewerIndex]) {
+            setManualStatus(list[state.activeViewerIndex].id, 'Keep');
+          }
+        });
+        document.getElementById('btnViewerReject').addEventListener('click', () => {
+          const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+          if (state.activeViewerIndex >= 0 && list[state.activeViewerIndex]) {
+            setManualStatus(list[state.activeViewerIndex].id, 'Reject');
+          }
+        });
+        document.getElementById('btnViewerDoubt').addEventListener('click', () => {
+          const list = state.filteredPhotosCache.length > 0 ? state.filteredPhotosCache : state.photos;
+          if (state.activeViewerIndex >= 0 && list[state.activeViewerIndex]) {
+            setManualStatus(list[state.activeViewerIndex].id, 'Ragu-ragu');
+          }
+        });
+        document.getElementById('btnViewerZoom').addEventListener('click', () => {
+          document.getElementById('viewerImage').classList.toggle('is-zoomed');
+        });
+
+        // Global Keyboard Shortcuts
+        window.addEventListener('keydown', (e) => {
+          // If viewer modal is open
+          if (state.activeViewerIndex >= 0) {
+            const key = e.key.toUpperCase();
+            if (key === 'ESCAPE') {
+              closePhotoViewer();
+            } else if (key === 'ARROWLEFT') {
+              prevViewerPhoto();
+            } else if (key === 'ARROWRIGHT') {
+              nextViewerPhoto();
+            } else if (key === 'K') {
+              document.getElementById('btnViewerKeep').click();
+            } else if (key === 'X') {
+              document.getElementById('btnViewerReject').click();
+            } else if (key === 'R') {
+              document.getElementById('btnViewerDoubt').click();
+            } else if (key === 'Z') {
+              document.getElementById('btnViewerZoom').click();
+            }
+          }
+        });
+
+        // Infinite Scroll / Lazy Load on Scroll
+        window.addEventListener('scroll', () => {
+          if (state.viewMode !== 'grid') return;
+          const trigger = document.getElementById('loadMoreTrigger');
+          if (!trigger) return;
+          const rect = trigger.getBoundingClientRect();
+          if (rect.top <= window.innerHeight + 300) {
+            appendMoreCards();
+          }
+        });
+
+        // Export Modals
+        document.getElementById('btnExportFolders').addEventListener('click', openExportModal);
+        document.getElementById('btnCloseExportModal').addEventListener('click', () => {
+          document.getElementById('exportModal').classList.add('hidden');
+        });
+        document.getElementById('btnCancelExport').addEventListener('click', () => {
+          document.getElementById('exportModal').classList.add('hidden');
+        });
+        document.getElementById('btnConfirmExport').addEventListener('click', runFolderExport);
+
+        // CSV & Standalone HTML
+        document.getElementById('btnExportCSV').addEventListener('click', exportCSVReport);
+        document.getElementById('btnDownloadHTML').addEventListener('click', downloadStandaloneHTML);
+      }
+
+      // Initialize on DOM ready
+      document.addEventListener('DOMContentLoaded', setupEventListeners);
+    })();
+  </script>
+</body>
+</html>
